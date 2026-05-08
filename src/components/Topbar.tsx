@@ -1,15 +1,19 @@
 'use client';
 import { useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
 
 type Props = {
+  activeSymbol: string;
   onAdd: () => void;
   onToggleTweaks: () => void;
   isDark: boolean;
   onToggleDark: () => void;
 };
 
-export default function Topbar({ onAdd, onToggleTweaks, isDark, onToggleDark }: Props) {
+export default function Topbar({ activeSymbol, onAdd, onToggleTweaks, isDark, onToggleDark }: Props) {
+  const router = useRouter();
   const [time, setTime] = useState<string>('');
+  const [symbol, setSymbol] = useState(activeSymbol);
 
   useEffect(() => {
     const tick = () => setTime(new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }));
@@ -18,39 +22,41 @@ export default function Topbar({ onAdd, onToggleTweaks, isDark, onToggleDark }: 
     return () => clearInterval(id);
   }, []);
 
+  async function submit(e: React.FormEvent) {
+    e.preventDefault();
+    const next = symbol.trim().toUpperCase();
+    if (!next) return;
+    await fetch('/api/settings', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ active_symbol: next }),
+    });
+    router.push(`/?symbol=${encodeURIComponent(next)}`);
+    router.refresh();
+  }
+
   return (
     <header className="topbar">
       <div className="brand">
-        <div className="brand-mark">₿</div>
+        <div className="brand-mark">$</div>
         <div>
-          <div className="brand-name">DCA Tracker</div>
-          <div className="brand-sub">sats/THB · v1.0.0</div>
+          <div className="brand-name">US Stock Tracker</div>
+          <div className="brand-sub">{activeSymbol} · Technical Signals · v1.0.0</div>
         </div>
       </div>
       <div className="topbar-actions">
-        <span className="mono" style={{ fontSize: 11, color: 'var(--muted)', marginRight: 12 }}>
+        <form className="symbol-search" onSubmit={submit}>
+          <input value={symbol} onChange={(e) => setSymbol(e.target.value.toUpperCase())} aria-label="Stock symbol" />
+          <button className="btn" type="submit">Search</button>
+        </form>
+        <span className="mono" style={{ fontSize: 11, color: 'var(--muted)', marginRight: 4 }}>
           {time ? `Last sync · ${time}` : ''}
         </span>
         <button className="btn" onClick={onToggleDark} title={isDark ? 'Switch to light mode' : 'Switch to dark mode'}>
-          {isDark ? (
-            <svg width="12" height="12" viewBox="0 0 16 16" fill="none">
-              <circle cx="8" cy="8" r="3" stroke="currentColor" strokeWidth="1.3"/>
-              <path d="M8 1v2M8 13v2M1 8h2M13 8h2M3.5 3.5l1.4 1.4M11.1 11.1l1.4 1.4M3.5 12.5l1.4-1.4M11.1 4.9l1.4-1.4" stroke="currentColor" strokeWidth="1.3"/>
-            </svg>
-          ) : (
-            <svg width="12" height="12" viewBox="0 0 16 16" fill="none">
-              <path d="M13.5 10.5A6 6 0 0 1 5.5 2.5a6 6 0 1 0 8 8z" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round"/>
-            </svg>
-          )}
+          {isDark ? 'Light' : 'Dark'}
         </button>
-        <button className="btn" onClick={onToggleTweaks}>
-          <svg width="12" height="12" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="5.5" stroke="currentColor" strokeWidth="1.3"/><path d="M8 1v2M8 13v2M1 8h2M13 8h2M3.5 3.5l1.4 1.4M11.1 11.1l1.4 1.4M3.5 12.5l1.4-1.4M11.1 4.9l1.4-1.4" stroke="currentColor" strokeWidth="1.3"/></svg>
-          Tweaks
-        </button>
-        <button className="btn btn-primary" onClick={onAdd}>
-          <svg width="12" height="12" viewBox="0 0 16 16" fill="none"><path d="M8 3v10M3 8h10" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"/></svg>
-          Add buy
-        </button>
+        <button className="btn" onClick={onToggleTweaks}>Tweaks</button>
+        <button className="btn btn-primary" onClick={onAdd}>Add position</button>
       </div>
     </header>
   );

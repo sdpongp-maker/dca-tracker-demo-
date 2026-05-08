@@ -1,7 +1,16 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import type { EnrichedEntry, Summary, Goals, Delta24 } from '@/types';
+import type {
+  AiAnalysis,
+  Candle,
+  EnrichedPosition,
+  PortfolioSummary,
+  StockQuote,
+  TechnicalSnapshot,
+  Timeframe,
+  WatchlistItem,
+} from '@/types';
 import Topbar from './Topbar';
 import SectionLabel from './SectionLabel';
 import PnlCard from './PnlCard';
@@ -13,12 +22,16 @@ import AddBuyModal from './AddBuyModal';
 import TweaksPanel, { ACCENTS, type Accent } from './TweaksPanel';
 
 type Props = {
-  records: EnrichedEntry[];
-  summary: Summary | null;
-  delta24: Delta24 | null;
-  currentPrice: number;
+  activeSymbol: string;
+  quote: StockQuote;
+  candles: Candle[];
+  technical: TechnicalSnapshot | null;
+  analysis: AiAnalysis;
+  watchlist: WatchlistItem[];
+  positions: EnrichedPosition[];
+  summary: PortfolioSummary | null;
   priceStale: boolean;
-  goals: Goals;
+  timeframe: Timeframe;
 };
 
 export default function Dashboard(props: Props) {
@@ -51,42 +64,58 @@ export default function Dashboard(props: Props) {
 
   useEffect(() => {
     const root = document.documentElement;
-    if (isDark) {
-      root.classList.add('dark');
-    } else {
-      root.classList.remove('dark');
-    }
+    root.classList.toggle('dark', isDark);
     localStorage.setItem('dca.theme', isDark ? 'dark' : 'light');
   }, [isDark]);
 
   return (
     <div className="shell">
       <Topbar
+        activeSymbol={props.activeSymbol}
         onAdd={() => setShowModal(true)}
-        onToggleTweaks={() => setShowTweaks(v => !v)}
+        onToggleTweaks={() => setShowTweaks((value) => !value)}
         isDark={isDark}
-        onToggleDark={() => setIsDark(v => !v)}
+        onToggleDark={() => setIsDark((value) => !value)}
       />
 
-      <SectionLabel num="01" title="Overview"          hint="PNL · chart · hover for daily values" />
+      <SectionLabel num="01" title="Dashboard" hint="quote · watchlist · technical signal" />
       <div className="hero">
         <PnlCard
+          quote={props.quote}
           summary={props.summary}
-          records={props.records}
-          delta24={props.delta24}
+          analysis={props.analysis}
           priceStale={props.priceStale}
         />
-        <ChartCard records={props.records} />
+        <GoalsComponent
+          activeSymbol={props.activeSymbol}
+          watchlist={props.watchlist}
+          quote={props.quote}
+          technical={props.technical}
+          analysis={props.analysis}
+        />
       </div>
-      <SectionLabel num="02" title="Metrics & Goals" hint="core numbers · progress" />
-      <StatsGrid summary={props.summary} records={props.records} />
-      <GoalsComponent summary={props.summary} goals={props.goals} />
-      <SectionLabel num="03" title="Buy History"     hint="sortable · searchable · paginated" />
-      <RecordsTable records={props.records} />
+
+      <SectionLabel num="02" title="Technical Chart" hint="candles · MA · RSI · MACD" />
+      <ChartCard
+        symbol={props.activeSymbol}
+        candles={props.candles}
+        timeframe={props.timeframe}
+      />
+      <StatsGrid
+        quote={props.quote}
+        summary={props.summary}
+        technical={props.technical}
+        positions={props.positions}
+      />
+
+      <SectionLabel num="03" title="Portfolio & DCA" hint="lots · average cost · target" />
+      <RecordsTable records={props.positions} symbol={props.activeSymbol} />
+
       {showModal && (
         <AddBuyModal
           onClose={() => setShowModal(false)}
-          currentPrice={props.currentPrice}
+          symbol={props.activeSymbol}
+          currentPrice={props.quote.price}
         />
       )}
       {showTweaks && (

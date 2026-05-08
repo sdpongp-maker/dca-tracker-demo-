@@ -1,10 +1,12 @@
-import { fmtInt, fmtThb } from './_fmt';
+import { fmtPct, fmtShares, fmtUsd } from './_fmt';
 import Sparkline from './Sparkline';
-import type { Summary, EnrichedEntry } from '@/types';
+import type { EnrichedPosition, PortfolioSummary, StockQuote, TechnicalSnapshot } from '@/types';
 
 type Props = {
-  summary: Summary | null;
-  records: EnrichedEntry[];
+  quote: StockQuote;
+  summary: PortfolioSummary | null;
+  technical: TechnicalSnapshot | null;
+  positions: EnrichedPosition[];
 };
 
 type StatCell = {
@@ -16,135 +18,119 @@ type StatCell = {
   color: string;
 };
 
-const EMPTY_CELLS: StatCell[] = [
-  { lbl: 'Spend Fiat',         val: '—', sub: '฿',     foot: '0 days', spark: null, color: 'var(--muted)' },
-  { lbl: 'Total Satoshi',      val: '—', sub: 'sat',   foot: '—',      spark: null, color: 'var(--muted)' },
-  { lbl: 'Current BTC Price',  val: '—', sub: '฿',     foot: 'Bitkub · spot', spark: null, color: 'var(--muted)' },
-  { lbl: 'Market Value',       val: '—', sub: '฿',     foot: 'Your portfolio in THB', spark: null, color: 'var(--muted)' },
-  { lbl: 'Average Cost',       val: '—', sub: 'sat/฿', foot: 'Across all buys',       spark: null, color: 'var(--muted)' },
-  { lbl: 'Today sat/THB',      val: '—', sub: 'sat/฿', foot: '—',      spark: null, color: 'var(--muted)' },
-  { lbl: 'Max Drawdown',       val: '—', sub: '%',     foot: 'Peak-to-trough', spark: null, color: 'var(--muted)' },
-  { lbl: '% Profit / Loss',    val: '—', sub: '%',     foot: '—',      spark: null, color: 'var(--muted)' },
-  { lbl: 'Worst Single Buy',   val: '—', sub: '%',     foot: '—',      spark: null, color: 'var(--muted)' },
-  { lbl: 'Best Single Buy',    val: '—', sub: '%',     foot: '—',      spark: null, color: 'var(--muted)' },
-];
-
-function buildCells(summary: Summary, records: EnrichedEntry[]): StatCell[] {
-  const last30 = records.slice(-30);
-  const investedSeries = last30.map((r) => r.invested);
-  const portfolioSeries = last30.map((r) => r.portfolioValue);
-  const priceSeries = last30.map((r) => r.price_thb);
-  const satPerTHBSeries = last30.map((r) => r.satPerTHB);
-
-  const cumSatSeries: number[] = [];
-  let runningSat = 0;
-  for (const r of last30) {
-    runningSat += r.satoshi;
-    cumSatSeries.push(runningSat);
-  }
-
-  return [
+export default function StatsGrid({ quote, summary, technical, positions }: Props) {
+  const marketSeries = positions.map((row) => row.marketValue);
+  const investedSeries = positions.map((row) => row.cumInvested);
+  const cells: StatCell[] = [
     {
-      lbl: 'Spend Fiat',
-      val: fmtInt(summary.spendFiat),
-      sub: '฿',
-      foot: `${summary.numberOfDays} days · ${summary.numberOfDays > 0 ? Math.round(summary.spendFiat / summary.numberOfDays) : 0} ฿/day`,
+      lbl: 'Current Price',
+      val: fmtUsd(quote.price),
+      sub: 'USD',
+      foot: `${quote.symbol} · ${quote.source}`,
+      spark: null,
+      color: quote.change >= 0 ? 'var(--pos)' : 'var(--neg)',
+    },
+    {
+      lbl: 'Total Shares',
+      val: summary ? fmtShares(summary.totalShares) : '—',
+      sub: 'sh',
+      foot: `${positions.length} lots`,
+      spark: positions.map((row) => row.cumShares),
+      color: 'var(--accent)',
+    },
+    {
+      lbl: 'Average Cost',
+      val: summary ? fmtUsd(summary.averageCost) : '—',
+      sub: 'USD',
+      foot: summary ? `${fmtPct(((quote.price - summary.averageCost) / summary.averageCost) * 100)} vs cost` : 'No portfolio data',
+      spark: positions.map((row) => row.averageCost),
+      color: 'var(--fg)',
+    },
+    {
+      lbl: 'Market Value',
+      val: summary ? fmtUsd(summary.marketValue) : '—',
+      sub: 'USD',
+      foot: 'Portfolio value',
+      spark: marketSeries,
+      color: summary && summary.unrealized >= 0 ? 'var(--pos)' : 'var(--neg)',
+    },
+    {
+      lbl: 'Invested',
+      val: summary ? fmtUsd(summary.totalInvested) : '—',
+      sub: 'USD',
+      foot: 'Including fees',
       spark: investedSeries,
       color: 'var(--fg)',
     },
     {
-      lbl: 'Total Satoshi',
-      val: fmtInt(summary.totalSatoshi),
-      sub: 'sat',
-      foot: (summary.totalSatoshi / 1e8).toFixed(8) + ' BTC',
-      spark: cumSatSeries,
-      color: 'var(--accent)',
-    },
-    {
-      lbl: 'Current BTC Price',
-      val: fmtInt(summary.currentPrice),
-      sub: '฿',
-      foot: 'Bitkub · spot',
-      spark: priceSeries,
-      color: 'var(--accent)',
-    },
-    {
-      lbl: 'Market Value',
-      val: fmtThb(summary.marketValue),
-      sub: '฿',
-      foot: 'Your portfolio in THB',
-      spark: portfolioSeries,
-      color: summary.pctProfitLoss >= 0 ? 'var(--pos)' : 'var(--neg)',
-    },
-    {
-      lbl: 'Average Cost',
-      val: summary.averageCost.toFixed(2),
-      sub: 'sat/฿',
-      foot: 'Across all buys',
+      lbl: 'RSI 14',
+      val: technical?.latest?.rsi14?.toFixed(1) ?? '—',
+      sub: '',
+      foot: technical?.rsiLabel ?? 'Waiting for candles',
       spark: null,
-      color: 'var(--fg)',
+      color: technical?.rsiLabel === 'Overbought' ? 'var(--neg)' : technical?.rsiLabel === 'Oversold' ? 'var(--pos)' : 'var(--fg)',
     },
     {
-      lbl: 'Today sat/THB',
-      val: summary.todaySatPerTHB.toFixed(2),
-      sub: 'sat/฿',
-      foot:
-        summary.todaySatPerTHB > summary.averageCost
-          ? `+${(summary.todaySatPerTHB - summary.averageCost).toFixed(2)} vs avg (good buy)`
-          : `${(summary.todaySatPerTHB - summary.averageCost).toFixed(2)} vs avg`,
-      spark: satPerTHBSeries,
-      color: summary.todaySatPerTHB > summary.averageCost ? 'var(--pos)' : 'var(--neg)',
+      lbl: 'MACD',
+      val: technical?.latest?.macdHist?.toFixed(3) ?? '—',
+      sub: '',
+      foot: technical?.macdLabel ?? '—',
+      spark: null,
+      color: (technical?.latest?.macdHist ?? 0) >= 0 ? 'var(--pos)' : 'var(--neg)',
     },
     {
-      lbl: 'Max Drawdown',
-      val: summary.maxDrawdown.toFixed(2),
-      sub: '%',
-      foot: 'Peak-to-trough',
+      lbl: 'Support',
+      val: technical ? fmtUsd(technical.support) : '—',
+      sub: 'USD',
+      foot: '20-candle low',
+      spark: null,
+      color: 'var(--pos)',
+    },
+    {
+      lbl: 'Resistance',
+      val: technical ? fmtUsd(technical.resistance) : '—',
+      sub: 'USD',
+      foot: '20-candle high',
       spark: null,
       color: 'var(--neg)',
     },
     {
-      lbl: '% Profit / Loss',
-      val: (summary.pctProfitLoss >= 0 ? '+' : '') + summary.pctProfitLoss.toFixed(2),
-      sub: '%',
-      foot: `฿${fmtThb(summary.marketValue - summary.spendFiat)} unrealized`,
+      lbl: 'Forecast 1M',
+      val: technical?.forecast.find((row) => row.horizon === '1M') ? fmtUsd(technical.forecast.find((row) => row.horizon === '1M')!.price) : '—',
+      sub: 'USD',
+      foot: technical?.forecast.find((row) => row.horizon === '1M') ? `${fmtPct(technical.forecast.find((row) => row.horizon === '1M')!.changePct)} model` : 'Needs candles',
       spark: null,
-      color: summary.pctProfitLoss >= 0 ? 'var(--pos)' : 'var(--neg)',
+      color: 'var(--accent)',
     },
     {
-      lbl: 'Worst Single Buy',
-      val: (summary.worstEntryLossPct <= 0 ? '' : '+') + summary.worstEntryLossPct.toFixed(2),
-      sub: '%',
-      foot: summary.worstEntryDate
-        ? `${summary.worstEntryDate} · ฿${fmtThb(summary.worstEntryLossThb)}`
-        : 'No losing entries',
+      lbl: 'Forecast 3M',
+      val: technical?.forecast.find((row) => row.horizon === '3M') ? fmtUsd(technical.forecast.find((row) => row.horizon === '3M')!.price) : '—',
+      sub: 'USD',
+      foot: technical?.forecast.find((row) => row.horizon === '3M') ? `${fmtPct(technical.forecast.find((row) => row.horizon === '3M')!.changePct)} model` : 'Needs candles',
       spark: null,
-      color: summary.worstEntryLossPct < 0 ? 'var(--neg)' : 'var(--pos)',
+      color: 'var(--fg)',
     },
     {
-      lbl: 'Best Single Buy',
-      val: '+' + summary.bestEntryGainPct.toFixed(2),
-      sub: '%',
-      foot: summary.bestEntryDate ? summary.bestEntryDate : '—',
+      lbl: 'Forecast 6M',
+      val: technical?.forecast.find((row) => row.horizon === '6M') ? fmtUsd(technical.forecast.find((row) => row.horizon === '6M')!.price) : '—',
+      sub: 'USD',
+      foot: technical?.forecast.find((row) => row.horizon === '6M') ? `${fmtPct(technical.forecast.find((row) => row.horizon === '6M')!.changePct)} model` : 'Needs candles',
       spark: null,
-      color: 'var(--pos)',
+      color: 'var(--fg)',
     },
   ];
-}
 
-export default function StatsGrid({ summary, records }: Props) {
-  const cells = summary ? buildCells(summary, records) : EMPTY_CELLS;
   return (
     <div className="stats-grid">
-      {cells.map((s, i) => (
-        <div className="stat" key={i}>
-          <div className="stat-lbl">{s.lbl}</div>
-          <div className="stat-val" style={{ color: s.color }}>
-            {s.val}
-            <span className="sub">{s.sub}</span>
+      {cells.map((cell) => (
+        <div className="stat" key={cell.lbl}>
+          <div className="stat-lbl">{cell.lbl}</div>
+          <div className="stat-val" style={{ color: cell.color }}>
+            {cell.val}
+            {cell.sub && <span className="sub">{cell.sub}</span>}
           </div>
-          <div className="stat-foot">{s.foot}</div>
-          {s.spark && s.spark.length >= 2 && <Sparkline values={s.spark} color={s.color} />}
+          <div className="stat-foot">{cell.foot}</div>
+          {cell.spark && cell.spark.length >= 2 && <Sparkline values={cell.spark} color={cell.color} />}
         </div>
       ))}
     </div>

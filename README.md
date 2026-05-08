@@ -1,117 +1,69 @@
-# DCA Tracker
+# US Stock Tracker
 
-แอปติดตาม Bitcoin DCA รายวันในหน่วย THB — local-first, ไม่ต้องมี account, ไม่ต้อง deploy รันบนเครื่องตัวเองผ่าน Next.js dev server
+Local-first dashboard for US stock watchlists, technical swing-trade signals, and portfolio/DCA tracking.
 
-ดึงราคา BTC/THB แบบ live จาก Bitkub API (ไม่ต้องมี API key)
+The UI keeps the original DCA Tracker layout, but the data model now targets US equities:
 
----
+- Search a US stock symbol and load a delayed public quote
+- Watchlist stored locally in SQL Server
+- Candlestick chart with MA20, MA50, RSI 14, and MACD
+- Rule-based technical signal with Buy / Sell / Hold bias
+- Portfolio lot tracking with shares, entry price, fees, average cost, unrealized P/L, and DCA target price
 
-## สิ่งที่ต้องมีก่อน
+> Market data uses Twelve Data for quote/candles, FMP for historical EOD fallback, and Stooq only as a last no-key fallback. Treat the technical signal as decision support, not financial advice.
 
-| ซอฟต์แวร์ | เวอร์ชันขั้นต่ำ | ตรวจสอบ |
-|---|---|---|
-| [Node.js](https://nodejs.org) | 20 LTS ขึ้นไป | `node -v` |
-| npm | มากับ Node.js | `npm -v` |
-| macOS | 12 ขึ้นไป | (สำหรับ `.command` launcher) |
+## Requirements
 
----
+| Software | Minimum |
+|---|---|
+| Node.js | 20 LTS |
+| npm | included with Node |
+| SQL Server / Azure SQL Edge | running locally |
 
-## วิธีติดตั้ง
-
-### 1. Clone โปรเจค
-
-```bash
-git clone https://github.com/sdpongp-maker/dca-tracker-demo-.git
-cd dca-tracker-demo
-```
-
-### 2. ติดตั้ง dependencies
+## Setup
 
 ```bash
 npm install
-```
-
-### 3. เปิดใช้งาน
-
-มี 2 วิธี:
-
----
-
-## วิธีใช้งาน
-
-### วิธีที่ 1 — Double-click launcher (แนะนำ)
-
-ไฟล์ **`DCA Tracker.command`** คือ launcher แบบ TUI (Terminal UI) สำหรับ macOS
-
-**ครั้งแรก** ต้องให้สิทธิ์รันไฟล์ก่อน:
-
-```bash
-chmod +x "DCA Tracker.command"
-```
-
-จากนั้น **double-click** ไฟล์ `DCA Tracker.command` ใน Finder ได้เลย
-
-Terminal จะเปิดขึ้นพร้อม menu:
-
-```
-  ▸ Status
-    Restart Dev Server
-    Logs: Dev Server
-    Open Browser
-    Quit
-```
-
-**ปุ่มที่ใช้:**
-
-| ปุ่ม | การทำงาน |
-|---|---|
-| `↑` / `↓` หรือ `k` / `j` | เลื่อน cursor ขึ้น/ลง |
-| `Enter` | เลือก menu item |
-| `q` | ออกจากโปรแกรม (และหยุด dev server) |
-
-**Menu items:**
-
-- **Status** — ดูสถานะ dev server (PID, port, uptime, URL)
-- **Restart Dev Server** — restart Next.js
-- **Logs: Dev Server** — ดู log ย้อนหลัง 40 บรรทัด (กด `r` เพื่อ refresh)
-- **Open Browser** — เปิด `http://localhost:1080` ใน browser
-- **Quit** — ปิด launcher และหยุด dev server
-
-> **หมายเหตุ:** ถ้า port 3000 มีอะไรรันอยู่แล้ว launcher จะ "adopt" process นั้นแทนการ start ใหม่ เมื่อ quit launcher process นั้นจะยังคงรันอยู่
-
----
-
-### วิธีที่ 2 — Terminal ธรรมดา
-
-```bash
+cp .env.example .env.local
 npm run dev
 ```
 
-จากนั้นเปิด [http://localhost:1080](http://localhost:1080)
+Open [http://localhost:1080](http://localhost:1080).
 
----
+The app connects to your already-running local SQL Server or Azure SQL Edge instance on port `1433`. If `stock_tracker` does not exist, the app connects through `master` and creates it automatically. On first request it also creates these tables:
 
-## คำสั่งอื่น ๆ
+- `watchlist`
+- `positions`
+- `settings`
+
+## Useful Commands
 
 ```bash
-npm run build      # build production (ใช้ตรวจสอบ error)
+npm run dev        # Next.js dev server on port 1080
+npm run build      # production build check
 npm run lint       # ESLint
 npm run typecheck  # TypeScript check
 ```
 
----
+## Environment
 
-## ข้อมูล
-
-- **ฐานข้อมูล:** SQLite ไฟล์ `data/dca.db` สร้างอัตโนมัติตอน request แรก (gitignored)
-- **ราคา BTC:** ดึงจาก Bitkub API แบบ real-time ผ่าน `/api/price`
-- **ข้อมูลทั้งหมดอยู่บนเครื่องตัวเอง** ไม่มีการส่งออกไปที่ไหน
-
----
+```env
+DATABASE_URL="sqlserver://localhost:1433;database=stock_tracker;user=sa;password=lSBqDnzqWOkxE8N;encrypt=true;trustServerCertificate=true"
+DB_HOST=localhost
+DB_PORT=1433
+DB_USER=sa
+DB_PASSWORD=lSBqDnzqWOkxE8N
+DB_NAME=stock_tracker
+DB_ENCRYPT=true
+DB_TRUST_SERVER_CERTIFICATE=true
+TWELVE_DATA_API_KEY=
+FMP_API_KEY=
+```
 
 ## Stack
 
-- Next.js 16 App Router + TypeScript
-- Tailwind CSS v4
-- better-sqlite3
-- Bitkub API (ราคา BTC/THB)
+- Next.js App Router + TypeScript
+- SQL Server / Azure SQL Edge local connection
+- `mssql` Node client
+- Tailwind CSS
+- Twelve Data + FMP market data APIs

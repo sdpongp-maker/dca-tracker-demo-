@@ -1,13 +1,13 @@
 import { NextResponse } from 'next/server';
-import { getDb } from '@/lib/db';
-import type { Entry, ApiResult } from '@/types';
+import { deletePosition, updatePosition } from '@/lib/db';
+import type { ApiResult, Position } from '@/types';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
 type RouteCtx = { params: Promise<{ id: string }> };
 
-export async function PATCH(req: Request, ctx: RouteCtx): Promise<NextResponse<ApiResult<Entry>>> {
+export async function PATCH(req: Request, ctx: RouteCtx): Promise<NextResponse<ApiResult<Position>>> {
   const { id: idStr } = await ctx.params;
   const id = Number(idStr);
   if (!Number.isInteger(id) || id <= 0) {
@@ -20,35 +20,28 @@ export async function PATCH(req: Request, ctx: RouteCtx): Promise<NextResponse<A
   if (!body || typeof body !== 'object') {
     return NextResponse.json({ ok: false, error: 'invalid_body' }, { status: 400 });
   }
-  const { fiat_thb, price_thb } = body as { fiat_thb?: unknown; price_thb?: unknown };
 
-  const fiat = Number(fiat_thb);
-  if (!Number.isInteger(fiat) || fiat <= 0 || fiat > 10_000_000) {
-    return NextResponse.json({ ok: false, error: 'invalid_fiat_thb' }, { status: 400 });
+  const { shares, price, fees } = body as Record<string, unknown>;
+  const qty = Number(shares);
+  const entryPrice = Number(price);
+  const entryFees = Number(fees ?? 0);
+  if (!Number.isFinite(qty) || qty <= 0) {
+    return NextResponse.json({ ok: false, error: 'invalid_shares' }, { status: 400 });
   }
-  const price = Number(price_thb);
-  if (!Number.isFinite(price) || price <= 0 || price > 100_000_000) {
-    return NextResponse.json({ ok: false, error: 'invalid_price_thb' }, { status: 400 });
+  if (!Number.isFinite(entryPrice) || entryPrice <= 0) {
+    return NextResponse.json({ ok: false, error: 'invalid_price' }, { status: 400 });
   }
-
-  const satoshi = Math.floor((fiat / price) * 1e8);
-  if (satoshi <= 0) {
-    return NextResponse.json({ ok: false, error: 'satoshi_non_positive' }, { status: 400 });
-  }
-
-  const db = getDb();
-  const existing = db.prepare('SELECT id FROM entries WHERE id = ?').get(id);
-  if (!existing) {
-    return NextResponse.json({ ok: false, error: 'not_found' }, { status: 404 });
+  if (!Number.isFinite(entryFees) || entryFees < 0) {
+    return NextResponse.json({ ok: false, error: 'invalid_fees' }, { status: 400 });
   }
 
-  db.prepare('UPDATE entries SET fiat_thb = ?, price_thb = ?, satoshi = ? WHERE id = ?')
-    .run(fiat, price, satoshi, id);
-
-  const row = db
-    .prepare('SELECT id, date, fiat_thb, satoshi, price_thb, created_at FROM entries WHERE id = ?')
-    .get(id) as Entry;
-  return NextResponse.json({ ok: true, data: row });
+  try {
+    const row = await updatePosition(id, { shares: qty, price: entryPrice, fees: entryFees });
+    if (!row) return NextResponse.json({ ok: false, error: 'not_found' }, { status: 404 });
+    return NextResponse.json({ ok: true, data: row });
+  } catch {
+    return NextResponse.json({ ok: false, error: 'sqlserver_unavailable' }, { status: 503 });
+  }
 }
 
 export async function DELETE(_req: Request, ctx: RouteCtx): Promise<NextResponse<ApiResult<{ id: number }>>> {
@@ -57,10 +50,11 @@ export async function DELETE(_req: Request, ctx: RouteCtx): Promise<NextResponse
   if (!Number.isInteger(id) || id <= 0) {
     return NextResponse.json({ ok: false, error: 'invalid_id' }, { status: 400 });
   }
-
-  const info = getDb().prepare('DELETE FROM entries WHERE id = ?').run(id);
-  if (info.changes === 0) {
-    return NextResponse.json({ ok: false, error: 'not_found' }, { status: 404 });
+  try {
+    const deleted = await deletePosition(id);
+    if (!deleted) return NextResponse.json({ ok: false, error: 'not_found' }, { status: 404 });
+    return NextResponse.json({ ok: true, data: { id } });
+  } catch {
+    return NextResponse.json({ ok: false, error: 'sqlserver_unavailable' }, { status: 503 });
   }
-  return NextResponse.json({ ok: true, data: { id } });
 }

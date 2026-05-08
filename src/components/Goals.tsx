@@ -1,128 +1,76 @@
 'use client';
 
-import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { fmtInt } from './_fmt';
-import type { Summary, Goals as GoalsType } from '@/types';
+import { fmtPct, fmtUsd } from './_fmt';
+import type { AiAnalysis, StockQuote, TechnicalSnapshot, WatchlistItem } from '@/types';
 
 type Props = {
-  summary: Summary | null;
-  goals: GoalsType;
+  activeSymbol: string;
+  watchlist: WatchlistItem[];
+  quote: StockQuote;
+  technical: TechnicalSnapshot | null;
+  analysis?: AiAnalysis;
 };
 
-type EditField = 'goal_fiat' | 'goal_satoshi' | null;
-
-export default function Goals({ summary, goals }: Props) {
+export default function Goals({ activeSymbol, watchlist, quote, technical, analysis }: Props) {
   const router = useRouter();
-  const [editing, setEditing] = useState<EditField>(null);
-  const [draft, setDraft] = useState<number>(0);
-  const [busy, setBusy] = useState(false);
 
-  const spendFiat = summary?.spendFiat ?? 0;
-  const totalSatoshi = summary?.totalSatoshi ?? 0;
-  const progressFiat = summary?.progressFiat ?? 0;
-  const progressBTC = summary?.progressBTC ?? 0;
-  const btcFromSat = goals.goal_satoshi / 1e8;
-
-  function startEdit(field: 'goal_fiat' | 'goal_satoshi') {
-    setEditing(field);
-    setDraft(goals[field]);
+  async function select(symbol: string) {
+    await fetch('/api/settings', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ active_symbol: symbol }),
+    });
+    router.push(`/?symbol=${encodeURIComponent(symbol)}`);
+    router.refresh();
   }
 
-  async function save() {
-    if (editing === null) return;
-    const value = Math.floor(draft);
-    if (!Number.isInteger(value) || value <= 0) {
-      window.alert('Goal must be a positive integer');
-      return;
-    }
-    setBusy(true);
-    try {
-      const res = await fetch('/api/settings', {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ [editing]: value }),
-      });
-      const body = await res.json();
-      if (!res.ok || !body.ok) {
-        window.alert(body.error || 'Save failed');
-        return;
-      }
-      setEditing(null);
-      router.refresh();
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  function handleKey(e: React.KeyboardEvent<HTMLInputElement>) {
-    if (e.key === 'Enter') save();
-    if (e.key === 'Escape') setEditing(null);
+  async function addCurrent() {
+    await fetch('/api/watchlist', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ symbol: activeSymbol, name: quote.name, note: 'Watching' }),
+    });
+    router.refresh();
   }
 
   return (
-    <div className="goals">
-      <div className="goal-card">
+    <div className="goals stock-panel">
+      <div className="goal-card watchlist-card">
         <div className="goal-top">
-          <h3>Goal · Fiat Invested</h3>
-          <div className="pct">{progressFiat.toFixed(2)}%</div>
+          <h3>Watchlist</h3>
+          <button className="btn" onClick={addCurrent}>Add {activeSymbol}</button>
         </div>
-        <div className="goal-bar">
-          <div className="goal-fill" style={{ width: Math.min(100, progressFiat) + '%' }} />
-        </div>
-        <div className="goal-ticks">
-          <span>฿{fmtInt(spendFiat)}</span>
-          {editing === 'goal_fiat' ? (
-            <span>Goal · ฿
-              <input
-                type="number"
-                className="inline"
-                value={draft}
-                min={1}
-                onChange={(e) => setDraft(+e.target.value)}
-                onBlur={save}
-                onKeyDown={handleKey}
-                disabled={busy}
-                autoFocus
-              />
-            </span>
-          ) : (
-            <span className="editable" onClick={() => startEdit('goal_fiat')} title="Click to edit">
-              Goal · ฿{fmtInt(goals.goal_fiat)}
-            </span>
-          )}
+        <div className="watchlist-list">
+          {watchlist.map((item) => (
+            <button
+              key={item.id}
+              className={'watch-row' + (item.symbol === activeSymbol ? ' active' : '')}
+              onClick={() => select(item.symbol)}
+            >
+              <span>
+                <strong>{item.symbol}</strong>
+                <small>{item.name || item.note || 'US stock'}</small>
+              </span>
+              <span className="mono">View</span>
+            </button>
+          ))}
         </div>
       </div>
 
-      <div className="goal-card">
+      <div className="goal-card ai-card">
         <div className="goal-top">
-          <h3>Goal · Total Satoshi</h3>
-          <div className="pct">{progressBTC.toFixed(2)}%</div>
+          <h3>Technical Snapshot</h3>
+          <div className="pct">{technical?.trend ?? 'neutral'}</div>
         </div>
-        <div className="goal-bar">
-          <div className="goal-fill alt" style={{ width: Math.min(100, progressBTC) + '%' }} />
-        </div>
-        <div className="goal-ticks">
-          <span>{fmtInt(totalSatoshi)} sat</span>
-          {editing === 'goal_satoshi' ? (
-            <span>Goal ·
-              <input
-                type="number"
-                className="inline"
-                value={draft}
-                min={1}
-                onChange={(e) => setDraft(+e.target.value)}
-                onBlur={save}
-                onKeyDown={handleKey}
-                disabled={busy}
-                autoFocus
-              /> sat ({(draft / 1e8).toFixed(2)} ₿)
-            </span>
-          ) : (
-            <span className="editable" onClick={() => startEdit('goal_satoshi')} title="Click to edit">
-              Goal · {fmtInt(goals.goal_satoshi)} sat ({btcFromSat.toFixed(2)} ₿)
-            </span>
-          )}
+        <div className="ai-lines">
+          <div><span>MA</span><strong>{technical?.maLabel ?? 'Waiting for data'}</strong></div>
+          <div><span>RSI</span><strong>{technical?.latest?.rsi14?.toFixed(1) ?? '—'} · {technical?.rsiLabel ?? '—'}</strong></div>
+          <div><span>MACD</span><strong>{technical?.macdLabel ?? '—'}</strong></div>
+          <div><span>Range</span><strong>${fmtUsd(technical?.support ?? quote.price)} / ${fmtUsd(technical?.resistance ?? quote.price)}</strong></div>
+          <div><span>Today</span><strong>{quote.change >= 0 ? '+' : ''}${fmtUsd(quote.change)} · {fmtPct(quote.changePct)}</strong></div>
+          <div><span>Target</span><strong>{analysis?.fundamentals?.priceTarget ? `$${fmtUsd(analysis.fundamentals.priceTarget)} · ${analysis.fundamentals.analystCount} analysts` : 'n/a'}</strong></div>
+          <div><span>Quality</span><strong>{analysis?.fundamentals ? `${analysis.fundamentals.rating} · ROE ${analysis.fundamentals.roe === null ? 'n/a' : fmtPct(analysis.fundamentals.roe * 100, 1)}` : 'n/a'}</strong></div>
         </div>
       </div>
     </div>
