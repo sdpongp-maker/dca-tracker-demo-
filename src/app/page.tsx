@@ -1,49 +1,69 @@
 import Dashboard from '@/components/Dashboard';
-import { getDb } from '@/lib/db';
-import { fetchCurrentPrice } from '@/lib/bitkub';
-import { enrichEntries, computeSummary, computeDelta24 } from '@/lib/calc';
-import type { Entry, Goals } from '@/types';
+import { getActiveSymbol, listPositions, listWatchlist, saveMarketSnapshot } from '@/lib/db';
+import { buildAiAnalysis, computePortfolioSummary, enrichPositions, summarizeTechnicals } from '@/lib/calc';
+import { fallbackQuote, fetchCandles, fetchFundamentals, fetchStockQuote } from '@/lib/stockApi';
+import type { WatchlistItem } from '@/types';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
-export default async function Page() {
-  const db = getDb();
+export default async function Page({
+  searchParams,
+}: {
+  searchParams?: Promise<{ symbol?: string; tf?: string }>;
+}) {
+  const params = await searchParams;
+  const dbSymbol = params?.symbol ? null : await safeDb(() => getActiveSymbol(), 'AMD');
+  const activeSymbol = (params?.symbol ?? dbSymbol ?? 'AMD').toUpperCase();
+  const timeframe = params?.tf === '1D' || params?.tf === '1W' ? params.tf : '1M';
 
-  const entries = db
-    .prepare('SELECT id, date, fiat_thb, satoshi, price_thb, created_at FROM entries ORDER BY date ASC')
-    .all() as Entry[];
+  const [quoteResult, candles, fundamentals, watchlist, rawPositions] = await Promise.all([
+    fetchStockQuote(activeSymbol),
+    fetchCandles(activeSymbol, timeframe),
+    fetchFundamentals(activeSymbol),
+    safeDb(() => listWatchlist(), fallbackWatchlist(activeSymbol)),
+    safeDb(() => listPositions(activeSymbol), []),
+  ]);
 
-  const goalRows = db
-    .prepare('SELECT key, value FROM settings WHERE key IN (?, ?)')
-    .all('goal_fiat', 'goal_satoshi') as Array<{ key: string; value: string }>;
-  const goalMap = new Map(goalRows.map((r) => [r.key, Number(r.value)]));
-  const goals: Goals = {
-    goal_fiat: goalMap.get('goal_fiat') ?? 200_000,
-    goal_satoshi: goalMap.get('goal_satoshi') ?? 2_000_000,
-  };
-
-  const live = await fetchCurrentPrice();
-  const priceStale = live === null;
-  const currentPrice =
-    live !== null
-      ? live
-      : entries.length > 0
-        ? entries[entries.length - 1]!.price_thb
-        : 0;
-
-  const enriched = enrichEntries(entries);
-  const summary = enriched.length > 0 ? computeSummary(enriched, currentPrice, goals) : null;
-  const delta24 = computeDelta24(enriched);
+  const quote = quoteResult ?? fallbackQuote(activeSymbol);
+  const priceStale = quoteResult === null;
+  const positions = enrichPositions(rawPositions, quote.price);
+  const summary = computePortfolioSummary(activeSymbol, positions, quote.price);
+  const technical = summarizeTechnicals(candles);
+  const analysis = buildAiAnalysis(activeSymbol, technical, summary, fundamentals);
+  await safeDb(() => saveMarketSnapshot(quote, technical), undefined);
 
   return (
     <Dashboard
-      records={enriched}
+      activeSymbol={activeSymbol}
+      quote={quote}
+      candles={candles}
+      technical={technical}
+      analysis={analysis}
+      watchlist={watchlist}
+      positions={positions}
       summary={summary}
-      delta24={delta24}
-      currentPrice={currentPrice}
       priceStale={priceStale}
-      goals={goals}
+      timeframe={timeframe}
     />
   );
+}
+
+async function safeDb<T>(fn: () => Promise<T>, fallback: T): Promise<T> {
+  try {
+    return await fn();
+  } catch (error) {
+    console.error('SQL Server unavailable:', error);
+    return fallback;
+  }
+}
+
+function fallbackWatchlist(activeSymbol: string): WatchlistItem[] {
+  return ['AMD', 'ARM', 'NVDA'].map((symbol, index) => ({
+    id: index + 1,
+    symbol,
+    name: symbol === activeSymbol ? `${symbol} active` : `${symbol} demo`,
+    note: 'Connect SQL Server to persist',
+    created_at: new Date(0).toISOString(),
+  }));
 }

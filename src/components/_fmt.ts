@@ -1,10 +1,15 @@
 export const fmtInt = (n: number): string => Math.round(n).toLocaleString('en-US');
 
-export const fmtThb = (n: number, d = 2): string =>
+export const fmtUsd = (n: number, d = 2): string =>
   n.toLocaleString('en-US', { minimumFractionDigits: d, maximumFractionDigits: d });
+
+export const fmtThb = fmtUsd;
 
 export const fmtPct = (n: number, d = 2): string =>
   (n >= 0 ? '+' : '') + n.toFixed(d) + '%';
+
+export const fmtShares = (n: number): string =>
+  n.toLocaleString('en-US', { maximumFractionDigits: 6 });
 
 export const fmtDateShort = (yyyyMmDd: string): string => {
   const [y, m, d] = yyyyMmDd.split('-').map(Number);

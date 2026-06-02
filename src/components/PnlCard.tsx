@@ -1,93 +1,65 @@
-import { fmtInt, fmtThb, fmtPct } from './_fmt';
-import type { Summary, EnrichedEntry, Delta24 } from '@/types';
+import { fmtPct, fmtUsd } from './_fmt';
+import type { AiAnalysis, PortfolioSummary, StockQuote } from '@/types';
 
 type Props = {
-  summary: Summary | null;
-  records: EnrichedEntry[];
-  delta24: Delta24 | null;
+  quote: StockQuote;
+  summary: PortfolioSummary | null;
+  analysis: AiAnalysis;
   priceStale: boolean;
 };
 
-export default function PnlCard({ summary, records, delta24, priceStale }: Props) {
-  if (!summary || records.length === 0) {
-    return (
-      <div className="pnl-card">
-        <div className="pnl-head">
-          <span>Unrealized P&amp;L</span>
-          <span className="live">
-            <span className="live-dot" style={priceStale ? { background: 'var(--muted)' } : undefined} />
-            LIVE
-          </span>
-        </div>
-        <div>
-          <div className="pnl-value" style={{ color: 'var(--muted)' }}>—</div>
-          <div className="pnl-delta">
-            <span className="mono" style={{ fontSize: 11, color: 'var(--muted)' }}>
-              No purchases yet
-            </span>
-          </div>
-        </div>
-        <div className="pnl-split">
-          <div>
-            <div className="lbl">Market Value</div>
-            <div className="val" style={{ color: 'var(--muted)' }}>—</div>
-          </div>
-          <div>
-            <div className="lbl">Invested</div>
-            <div className="val" style={{ color: 'var(--muted)' }}>—</div>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  const pos = summary.marketValue - summary.spendFiat >= 0;
+export default function PnlCard({ quote, summary, analysis, priceStale }: Props) {
+  const signalClass = analysis.signal === 'BUY' ? 'pos' : analysis.signal === 'SELL' ? 'neg' : 'neutral';
+  const pnl = summary?.unrealized ?? quote.change;
+  const pnlPct = summary?.pctProfitLoss ?? quote.changePct;
 
   return (
     <div className="pnl-card">
       <div className="pnl-head">
-        <span>Unrealized P&amp;L</span>
-        <span className="live" title={priceStale ? 'Price stale — Bitkub unreachable' : undefined}>
+        <span>{quote.symbol} Quote</span>
+        <span className="live" title={priceStale ? 'Using fallback/demo price' : quote.source}>
           <span className="live-dot" style={priceStale ? { background: 'var(--muted)' } : undefined} />
-          LIVE
+          {priceStale ? 'FALLBACK' : 'LIVE'}
         </span>
       </div>
       <div>
         <div className="pnl-value">
-          <span className="currency">฿</span>
-          {fmtThb(summary.marketValue - summary.spendFiat)}
+          <span className="currency">$</span>
+          {fmtUsd(quote.price)}
         </div>
         <div className="pnl-delta">
-          <span className={'chip ' + (pos ? 'pos' : 'neg')}>
-            {fmtPct(summary.pctProfitLoss)}
+          <span className={'chip ' + (quote.change >= 0 ? 'pos' : 'neg')}>
+            {quote.change >= 0 ? '+' : ''}{fmtUsd(quote.change)} · {fmtPct(quote.changePct)}
           </span>
           <span className="mono" style={{ fontSize: 11, color: 'var(--muted)' }}>
-            all-time · {summary.numberOfDays} days
+            {quote.source}
           </span>
         </div>
       </div>
       <div className="pnl-split">
         <div>
-          <div className="lbl">Market Value</div>
-          <div className="val">฿{fmtThb(summary.marketValue)}</div>
+          <div className="lbl">Composite Signal</div>
+          <div className="val">
+            <span className={'chip ' + signalClass}>{analysis.signal}</span>
+            <span className="unit">{analysis.totalScore}/100</span>
+          </div>
         </div>
         <div>
-          <div className="lbl">Invested</div>
-          <div className="val">฿{fmtInt(summary.spendFiat)}</div>
+          <div className="lbl">Scores</div>
+          <div className="val" style={{ color: pnl >= 0 ? 'var(--pos)' : 'var(--neg)' }}>
+            T{analysis.technicalScore} F{analysis.fundamentalScore}
+            <span className="unit">V{analysis.valuationScore} A{analysis.analystScore}</span>
+          </div>
         </div>
       </div>
-      {delta24 && (
-        <div className="pnl-meta">
+      <div className="pnl-meta">
+        <span>{analysis.summary}</span>
+        {summary && (
           <span>
-            24h{' '}
-            <strong style={{ color: delta24.delta >= 0 ? 'var(--pos)' : 'var(--neg)' }}>
-              {delta24.delta >= 0 ? '+' : ''}
-              {fmtThb(delta24.delta)}฿
-            </strong>{' '}
-            ({fmtPct(delta24.pct)})
+            Portfolio {pnl >= 0 ? '+' : ''}${fmtUsd(pnl)} ({fmtPct(pnlPct)})
           </span>
-        </div>
-      )}
+        )}
+      </div>
     </div>
   );
 }
