@@ -92,7 +92,7 @@ export default function AddBuyModal({ onClose, currentPrice }: Props) {
                 value={price}
                 min={1}
                 max={100_000_000}
-                step={1}
+                step={0.01}
                 onChange={(e) => setPrice(+e.target.value)}
                 required
               />
