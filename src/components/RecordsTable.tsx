@@ -18,7 +18,7 @@ const COLUMNS: Column[] = [
   { key: 'date', label: 'Date', align: 'left', fmt: (v) => fmtDateShort(v as string) },
   { key: 'fiat_thb',  label: 'Fiat (฿)',       fmt: (v) => fmtInt(v as number) },
   { key: 'satoshi',   label: 'Satoshi',        fmt: (v) => fmtInt(v as number) },
-  { key: 'price_thb', label: 'BTC Price',      fmt: (v) => fmtInt(v as number) },
+  { key: 'price_thb', label: 'BTC Price',      fmt: (v) => fmtThb(v as number) },
   { key: 'portfolioValue', label: 'Portfolio Value', fmt: (v) => fmtThb(v as number) },
   { key: 'invested',  label: 'Invested',       fmt: (v) => fmtInt(v as number) },
   { key: 'unrealized', label: 'Unrealized',    fmt: (v) => ((v as number) >= 0 ? '+' : '') + fmtThb(v as number), cls: (v) => v >= 0 ? 'pos' : 'neg' },
