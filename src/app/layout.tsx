@@ -15,7 +15,7 @@ const jetbrains = JetBrains_Mono({
 });
 
 export const metadata: Metadata = {
-  title: 'DCA Tracker',
+  title: 'DCA Tracker Demo',
   description: 'Bitcoin DCA tracker · sats/THB',
 };
 

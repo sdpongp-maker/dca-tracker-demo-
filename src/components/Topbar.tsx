@@ -23,8 +23,8 @@ export default function Topbar({ onAdd, onToggleTweaks, isDark, onToggleDark }: 
       <div className="brand">
         <div className="brand-mark">₿</div>
         <div>
-          <div className="brand-name">DCA Tracker</div>
-          <div className="brand-sub">sats/THB · v1.0.0</div>
+          <div className="brand-name">DCA Tracker Demo</div>
+          <div className="brand-sub">sats/THB · v1.2.1</div>
         </div>
       </div>
       <div className="topbar-actions">
