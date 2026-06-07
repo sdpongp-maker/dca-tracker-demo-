@@ -41,7 +41,7 @@ function formatDate(d: Date): string {
 }
 
 function formatDateShort(d: Date): string {
-  return d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short' });
+  return d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: '2-digit' });
 }
 
 function formatSat(n: number): string {
